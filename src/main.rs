@@ -19,8 +19,14 @@ fn main() {
         let mut d = ZlibDecoder::new(&content as &[u8]);
         let mut s = String::new();
         d.read_to_string(&mut s).unwrap();
+        let p: Vec<&str> = s.split('\0').collect();
         if args[2] == "-p" {
-            let p: Vec<&str> = s.split('\0').collect();
+            print!("{}", p[1]);
+        } else if args[2] == "-t" {
+            let p: Vec<&str> = p[0].split(' ').collect();
+            print!("{}", p[0]);
+        } else if args[2] == "-s" {
+            let p: Vec<&str> = p[0].split(' ').collect();
             print!("{}", p[1]);
         }
     } else {
