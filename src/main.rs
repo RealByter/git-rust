@@ -91,6 +91,7 @@ fn main() {
                 encoder.write_all(&content.as_bytes()).unwrap();
                 let zlib_hash = encoder.finish().unwrap();
 
+                // if the folder exists, you can still write to it
                 match fs::create_dir(format!(".git/objects/{}", &hex_hash[..2])) {
                     Ok(()) => {
                         fs::write(
