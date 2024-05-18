@@ -1,10 +1,9 @@
 use clap::{ArgGroup, Parser, Subcommand};
-use flate2::read::ZlibDecoder;
-#[allow(unused_imports)]
-use std::env;
-#[allow(unused_imports)]
+use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
+use hex;
+use sha1::{Digest, Sha1};
 use std::fs;
-use std::io::Read;
+use std::io::{ErrorKind, Read, Write};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -26,6 +25,11 @@ enum Command {
         show_size: bool,
         object_hash: String,
     },
+    HashObject {
+        #[clap(short = 'w', required = true)]
+        write: bool,
+        file: String,
+    },
 }
 
 fn main() {
@@ -45,15 +49,20 @@ fn main() {
             show_size,
             object_hash,
         } => {
+            // Read the content of the object
             let content = fs::read(format!(
                 ".git/objects/{}/{}",
                 &object_hash[..2],
                 &object_hash[2..]
             ))
             .unwrap();
+
+            // Zlib decode
             let mut d = ZlibDecoder::new(&content as &[u8]);
             let mut s = String::new();
             d.read_to_string(&mut s).unwrap();
+
+            // Output the correct information
             let p: Vec<&str> = s.split('\0').collect();
             if pretty_print {
                 print!("{}", p[1]);
@@ -63,6 +72,47 @@ fn main() {
             } else if show_size {
                 let p: Vec<&str> = p[0].split(' ').collect();
                 print!("{}", p[1]);
+            }
+        }
+        Command::HashObject { write, file } => {
+            if write {
+                // Get the content and add the headers
+                let file_content = fs::read_to_string(file).unwrap();
+                let content = format!("blob {}\0{}", file_content.len(), file_content);
+
+                // Create the sha1 hash
+                let mut hasher = Sha1::new();
+                hasher.update(&content);
+                let result = hasher.finalize();
+                let hex_hash = hex::encode(result);
+
+                // Zlib encode the content
+                let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+                encoder.write_all(&content.as_bytes()).unwrap();
+                let zlib_hash = encoder.finish().unwrap();
+
+                match fs::create_dir(format!(".git/objects/{}", &hex_hash[..2])) {
+                    Ok(()) => {
+                        fs::write(
+                            format!(".git/objects/{}/{}", &hex_hash[..2], &hex_hash[2..]),
+                            zlib_hash,
+                        )
+                        .unwrap();
+                    }
+                    Err(e) => {
+                        if e.kind() == ErrorKind::AlreadyExists {
+                            fs::write(
+                                format!(".git/objects/{}/{}", &hex_hash[..2], &hex_hash[2..]),
+                                zlib_hash,
+                            )
+                            .unwrap();
+                        } else {
+                            panic!("Failed to write to file");
+                        }
+                    }
+                }
+
+                print!("{}", hex_hash);
             }
         }
     }
