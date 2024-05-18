@@ -56,13 +56,13 @@ fn main() {
             d.read_to_string(&mut s).unwrap();
             let p: Vec<&str> = s.split('\0').collect();
             if pretty_print {
-                println!("{}", p[1]);
+                print!("{}", p[1]);
             } else if show_type {
                 let p: Vec<&str> = p[0].split(' ').collect();
-                println!("{}", p[0]);
+                print!("{}", p[0]);
             } else if show_size {
                 let p: Vec<&str> = p[0].split(' ').collect();
-                println!("{}", p[1]);
+                print!("{}", p[1]);
             }
         }
     }
