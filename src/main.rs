@@ -26,12 +26,15 @@ enum Command {
         write: bool,
         file: String,
     },
-    LsTree,
+    LsTree {
+        #[clap(required = true)]
+        name_only: bool,
+        tree_hash: String
+    },
     WriteTree,
 }
 
 fn main() {
-    // let args: Vec<String> = env::args().collect();
     let args = Args::parse();
     match args.command {
         Command::Init => git::init(),
@@ -42,8 +45,8 @@ fn main() {
             show_size,
             object_hash,
         } => git::cat_file(pretty_print, show_type, show_size, object_hash),
-        Command::HashObject { write, file } => git::hash_blob(write, &file, git::ObjectType::Blob),
-        Command::LsTree => git::ls_tree(),
+        Command::HashObject { write, file } => git::hash_blob(write, &file),
+        Command::LsTree { name_only, tree_hash } => git::ls_tree(name_only, tree_hash),
         Command::WriteTree => git::write_tree(),
     }
 }

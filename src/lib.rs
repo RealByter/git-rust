@@ -6,7 +6,7 @@ pub mod git {
     use std::io::{ErrorKind, Read, Write};
     use std::path::Path;
 
-    pub enum ObjectType {
+    enum ObjectType {
         Blob,
         Tree,
     }
@@ -19,20 +19,22 @@ pub mod git {
         println!("Initialized git directory");
     }
 
-    pub fn cat_file(pretty_print: bool, show_type: bool, show_size: bool, object_hash: String) {
-        // Read the content of the object
+    fn read_object(object_hash: String) -> Vec<u8> {
         let content = fs::read(format!(
             ".git/objects/{}/{}",
             &object_hash[..2],
             &object_hash[2..]
         ))
         .unwrap();
-
-        // Zlib decode
         let mut decoder = ZlibDecoder::new(&content as &[u8]);
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed).unwrap();
+        decompressed
+    }
 
+    pub fn cat_file(pretty_print: bool, show_type: bool, show_size: bool, object_hash: String) {
+        // Read the content of the object
+        let decompressed = read_object(object_hash);
         // print!("{}", unsafe {
         //     &String::from_utf8_unchecked(decompressed.clone())
         // });
@@ -110,14 +112,16 @@ pub mod git {
         hex_hash
     }
 
-    pub fn hash_blob(write: bool, file: &str, object_type: ObjectType) {
+    pub fn hash_blob(write: bool, file: &str) {
         if write {
-            print!("{}", hash_object(Path::new(file), object_type))
+            print!("{}", hash_object(Path::new(file), ObjectType::Blob))
         }
     }
 
-    pub fn ls_tree() {
-        println!("Not supported yet");
+    pub fn ls_tree(name_only: bool, tree_hash: String) {
+        if name_only {
+            println!("{:?}", read_object(tree_hash));
+        }
     }
 
     pub fn write_tree() {
@@ -131,21 +135,25 @@ pub mod git {
                 if let Ok(entry) = entry {
                     let path = entry.path();
                     let file_name = path.file_name().unwrap();
+                    let object_type: ObjectType;
                     if path.is_dir() {
                         if file_name == ".git" {
                             continue;
                         } else {
                             content += "040000 ";
+                            object_type = ObjectType::Tree
                         }
                     } else {
                         content += "100644 ";
+                        object_type = ObjectType::Blob
                     }
                     content += file_name.to_str().unwrap();
                     content += "\0";
                     // content += &String::from_utf8_lossy(&recursively_write_to_tree(&path));
+                    
                     content += unsafe {
                         &String::from_utf8_unchecked(
-                            hex::decode(hash_object(path.as_path(), ObjectType::Tree)).unwrap(),
+                            hex::decode(hash_object(path.as_path(), object_type)).unwrap(),
                         )
                     }
                 }
