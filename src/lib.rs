@@ -2,7 +2,7 @@ pub mod git {
     use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
     use hex;
     use sha1::{Digest, Sha1};
-    use std::fs;
+    use std::{env, fs};
     use std::io::{ErrorKind, Read, Write};
     use std::path::Path;
 
@@ -120,7 +120,9 @@ pub mod git {
 
     pub fn ls_tree(name_only: bool, tree_hash: String) {
         if name_only {
-            println!("{:?}", read_object(tree_hash));
+            let decompressed = read_object(tree_hash);
+            let curr_dir = env::current_dir().unwrap();
+            println!("{}", curr_dir.file_name().unwrap().to_str().unwrap());
         }
     }
 
