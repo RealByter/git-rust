@@ -2,9 +2,16 @@ pub mod git {
     use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
     use hex;
     use sha1::{Digest, Sha1};
-    use std::{env, fs};
     use std::io::{ErrorKind, Read, Write};
     use std::path::Path;
+    use std::{env, fs};
+
+    const FILE: &str = "100644";
+    const FOLDER: &str = "040000";
+    const OBJECT_TYPE_LENGTH: usize = 4;
+    const TREE_OBJ_TYPE_LENGTH: usize = 6;
+    const SHA_HASH_LENGTH: usize = 20;
+    const SPACES_PER_TAB: usize = 2;
 
     enum ObjectType {
         Blob,
@@ -120,10 +127,70 @@ pub mod git {
 
     pub fn ls_tree(name_only: bool, tree_hash: String) {
         if name_only {
-            let decompressed = read_object(tree_hash);
             let curr_dir = env::current_dir().unwrap();
-            println!("{}", curr_dir.file_name().unwrap().to_str().unwrap());
+            println!("{}/", curr_dir.file_name().unwrap().to_str().unwrap());
+            parse_tree_object(tree_hash, SPACES_PER_TAB)
         }
+    }
+
+    fn parse_tree_object(tree_hash: String, spaces: usize) {
+        let mut size_used: usize = 0;
+        let mut content_iter = read_object(tree_hash).into_iter();
+
+        let tree_check: String = content_iter
+            .by_ref()
+            .take(OBJECT_TYPE_LENGTH)
+            .map(|b| b as char)
+            .collect();
+        if tree_check != "tree" {
+            return;
+        }
+
+        content_iter.next(); // skip the space
+
+        let size_str: String = content_iter
+            .by_ref()
+            .take_while(|&b| b != 0)
+            .map(|b| b as char)
+            .collect();
+        let size: usize = size_str.parse().unwrap();
+
+        while size_used < size {
+            size_used += parse_tree_entry(&mut content_iter, spaces);
+        }
+    }
+
+    fn parse_tree_entry(content_iter: &mut std::vec::IntoIter<u8>, spaces: usize) -> usize {
+        let mut size_used: usize = 0;
+        let object_type: String = content_iter
+            .take(TREE_OBJ_TYPE_LENGTH as usize)
+            .map(|b| b as char)
+            .collect();
+        content_iter.next();
+        size_used += TREE_OBJ_TYPE_LENGTH + 1; // the space
+
+        let object_name: String = content_iter
+            .take_while(|&b| {
+                size_used += 1;
+                b != 0
+            })
+            .map(|b| b as char)
+            .collect();
+
+
+        print!("{}- ", " ".repeat(spaces));
+        if object_type == FILE {
+            content_iter.nth(SHA_HASH_LENGTH - 1); // starts at 0
+            println!("{}", object_name);
+        } else if object_type == FOLDER {
+            let sha_hash: Vec<_> = content_iter.take(SHA_HASH_LENGTH).collect();
+            let hex_hash = hex::encode(sha_hash);
+            println!("{}/", object_name);
+            parse_tree_object(hex_hash, spaces + SPACES_PER_TAB);
+        }
+        size_used += SHA_HASH_LENGTH;
+
+        size_used
     }
 
     pub fn write_tree() {
@@ -142,17 +209,19 @@ pub mod git {
                         if file_name == ".git" {
                             continue;
                         } else {
-                            content += "040000 ";
+                            content += FOLDER;
+                            content += " ";
                             object_type = ObjectType::Tree
                         }
                     } else {
-                        content += "100644 ";
+                        content += FILE;
+                        content += " ";
                         object_type = ObjectType::Blob
                     }
                     content += file_name.to_str().unwrap();
                     content += "\0";
                     // content += &String::from_utf8_lossy(&recursively_write_to_tree(&path));
-                    
+
                     content += unsafe {
                         &String::from_utf8_unchecked(
                             hex::decode(hash_object(path.as_path(), object_type)).unwrap(),

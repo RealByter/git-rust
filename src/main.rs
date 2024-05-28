@@ -27,7 +27,7 @@ enum Command {
         file: String,
     },
     LsTree {
-        #[clap(required = true)]
+        #[clap(short = 'n', required = true)] // remove the short
         name_only: bool,
         tree_hash: String
     },
