@@ -220,7 +220,6 @@ pub mod git {
                     }
                     content += file_name.to_str().unwrap();
                     content += "\0";
-                    // content += &String::from_utf8_lossy(&recursively_write_to_tree(&path));
 
                     content += unsafe {
                         &String::from_utf8_unchecked(
