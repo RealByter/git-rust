@@ -250,6 +250,7 @@ pub mod git {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
 
+        // TODO: make sure the parent is an actual commit
         let parents = match parent_hash {
             Some(parent_hash) => format!("parent {}\n", parent_hash),
             None => String::new(),
