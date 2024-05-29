@@ -29,9 +29,16 @@ enum Command {
     LsTree {
         #[clap(short = 'n', required = true)] // remove the short
         name_only: bool,
-        tree_hash: String
+        tree_hash: String,
     },
     WriteTree,
+    CommitTree {
+        #[clap(short = 'm')]
+        message: String,
+        #[clap(short = 'p')]
+        parent_hash: Option<String>,
+        tree_hash: String,
+    },
 }
 
 fn main() {
@@ -46,7 +53,15 @@ fn main() {
             object_hash,
         } => git::cat_file(pretty_print, show_type, show_size, object_hash),
         Command::HashObject { write, file } => git::hash_blob(write, &file),
-        Command::LsTree { name_only, tree_hash } => git::ls_tree(name_only, tree_hash),
+        Command::LsTree {
+            name_only,
+            tree_hash,
+        } => git::ls_tree(name_only, tree_hash),
         Command::WriteTree => git::write_tree(),
+        Command::CommitTree {
+            message,
+            parent_hash,
+            tree_hash,
+        } => git::commit_tree(message, tree_hash, parent_hash),
     }
 }

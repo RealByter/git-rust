@@ -4,6 +4,7 @@ pub mod git {
     use sha1::{Digest, Sha1};
     use std::io::{ErrorKind, Read, Write};
     use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
     use std::{env, fs};
 
     const FILE: &str = "100644";
@@ -16,6 +17,7 @@ pub mod git {
     enum ObjectType {
         Blob,
         Tree,
+        Commit,
     }
 
     pub fn init() {
@@ -69,29 +71,29 @@ pub mod git {
         }
     }
 
-    fn hash_object(file: &Path, object_type: ObjectType) -> String {
+    fn hash_object(file_content: String, object_type: ObjectType) -> String {
         // Get the content and add the headers
-        let content: String;
-        match object_type {
+        let content = match object_type {
             ObjectType::Blob => {
-                let file_content = fs::read_to_string(file).unwrap();
-                content = format!("{} {}\0{}", "blob", file_content.len(), file_content);
+                format!("blob {}\0{}", file_content.len(), file_content)
             }
             ObjectType::Tree => {
-                let file_content = recursively_write_to_tree(Path::new(&file));
-                content = format!("{} {}\0{}", "tree", file_content.len(), file_content);
+                format!("tree {}\0{}", file_content.len(), file_content)
             }
-        }
+            ObjectType::Commit => {
+                format!("commit {}\0{}", file_content.len(), file_content)
+            }
+        };
 
         // Create the sha1 hash
         let mut hasher = Sha1::new();
         hasher.update(&content);
         let result = hasher.finalize();
-        let hex_hash = hex::encode(&result);
+        let hex_hash = hex::encode(result);
 
         // Zlib encode the content
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(&content.as_bytes()).unwrap();
+        encoder.write_all(content.as_bytes()).unwrap();
         let zlib_hash = encoder.finish().unwrap();
 
         // if the folder exists, you can still write to it
@@ -121,7 +123,10 @@ pub mod git {
 
     pub fn hash_blob(write: bool, file: &str) {
         if write {
-            print!("{}", hash_object(Path::new(file), ObjectType::Blob))
+            print!(
+                "{}",
+                hash_object(fs::read_to_string(file).unwrap(), ObjectType::Blob)
+            )
         }
     }
 
@@ -163,7 +168,7 @@ pub mod git {
     fn parse_tree_entry(content_iter: &mut std::vec::IntoIter<u8>, spaces: usize) -> usize {
         let mut size_used: usize = 0;
         let object_type: String = content_iter
-            .take(TREE_OBJ_TYPE_LENGTH as usize)
+            .take(TREE_OBJ_TYPE_LENGTH)
             .map(|b| b as char)
             .collect();
         content_iter.next();
@@ -176,7 +181,6 @@ pub mod git {
             })
             .map(|b| b as char)
             .collect();
-
 
         print!("{}- ", " ".repeat(spaces));
         if object_type == FILE {
@@ -194,42 +198,74 @@ pub mod git {
     }
 
     pub fn write_tree() {
-        print!("{}", hash_object(Path::new("."), ObjectType::Tree));
+        print!(
+            "{}",
+            hash_object(recursively_write_to_tree(Path::new(".")), ObjectType::Tree)
+        );
     }
 
     fn recursively_write_to_tree(path: &Path) -> String {
         let mut content = String::new();
         if let Ok(entries) = fs::read_dir(path) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    let file_name = path.file_name().unwrap();
-                    let object_type: ObjectType;
-                    if path.is_dir() {
-                        if file_name == ".git" {
-                            continue;
-                        } else {
-                            content += FOLDER;
-                            content += " ";
-                            object_type = ObjectType::Tree
-                        }
+            for entry in entries.into_iter().flatten() {
+                let path = entry.path();
+                let file_name = path.file_name().unwrap();
+                let object_type: ObjectType;
+                if path.is_dir() {
+                    if file_name == ".git" {
+                        continue;
                     } else {
-                        content += FILE;
+                        content += FOLDER;
                         content += " ";
-                        object_type = ObjectType::Blob
+                        object_type = ObjectType::Tree
                     }
-                    content += file_name.to_str().unwrap();
-                    content += "\0";
+                } else {
+                    content += FILE;
+                    content += " ";
+                    object_type = ObjectType::Blob
+                }
+                content += file_name.to_str().unwrap();
+                content += "\0";
 
-                    content += unsafe {
-                        &String::from_utf8_unchecked(
-                            hex::decode(hash_object(path.as_path(), object_type)).unwrap(),
-                        )
-                    }
+                content += unsafe {
+                    &String::from_utf8_unchecked(
+                        hex::decode(hash_object(
+                            match object_type {
+                                ObjectType::Blob => fs::read_to_string(path.as_path()).unwrap(),
+                                ObjectType::Tree => recursively_write_to_tree(path.as_path()),
+                                _ => String::new(), // we don't care about anything else
+                            },
+                            object_type,
+                        ))
+                        .unwrap(),
+                    )
                 }
             }
         }
 
         content
+    }
+
+    pub fn commit_tree(message: String, tree_hash: String, parent_hash: Option<String>) {
+        let start = SystemTime::now();
+        let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
+
+        let parents = match parent_hash {
+            Some(parent_hash) => format!("parent {}\n", parent_hash),
+            None => String::new(),
+        };
+        let author = format!(
+            "author realbyter <justavishay@gmail.com> {} +0003",
+            since_the_epoch.as_secs()
+        );
+        let commiter = format!(
+            "commiter realbyter <justavishay@gmail.com> {} +0003",
+            since_the_epoch.as_secs()
+        );
+        let content = format!(
+            "tree {}\n{}{}\n{}\n\n{}",
+            tree_hash, parents, author, commiter, message
+        );
+        print!("{}", hash_object(content, ObjectType::Commit));
     }
 }
