@@ -39,6 +39,9 @@ enum Command {
         parent_hash: Option<String>,
         tree_hash: String,
     },
+    Log {
+        commit_hash: String,
+    }
 }
 
 fn main() {
@@ -63,5 +66,6 @@ fn main() {
             parent_hash,
             tree_hash,
         } => git::commit_tree(message, tree_hash, parent_hash),
+        Command::Log { commit_hash } => git::log(commit_hash),
     }
 }

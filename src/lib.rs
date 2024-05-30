@@ -6,6 +6,7 @@ pub mod git {
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
     use std::{env, fs};
+    use chrono::DateTime;
 
     const FILE: &str = "100644";
     const FOLDER: &str = "040000";
@@ -268,5 +269,27 @@ pub mod git {
             tree_hash, parents, author, commiter, message
         );
         print!("{}", hash_object(content, ObjectType::Commit));
+    }
+
+    pub fn log(commit_hash: String) 
+    {
+        let content_bytes = read_object(commit_hash);
+        let content = String::from_utf8_lossy(&content_bytes);
+        let content = content.split('\0').skip(1).next().unwrap();
+        // println!("{}", content);
+        let mut content = content.split("\n").skip(1);
+        let mut author_info = content.next().unwrap().split(" ").skip(1);
+        println!("Author: {} {}", author_info.next().unwrap(), author_info.next().unwrap());
+        // println!("{}\n{}\n{}", content.next().unwrap(), content.next().unwrap(), content.skip(1).next().unwrap());
+        let seconds_from_epoch = author_info.next().unwrap();
+
+        let datetime = DateTime::from_timestamp(seconds_from_epoch.parse::<i64>().unwrap(), 0).unwrap();
+        let formatted_datetime = datetime.format("%a %b %d %H:%M:%S %Y").to_string();
+        let timezone = author_info.next().unwrap();
+        println!("Date:   {} {}", formatted_datetime, timezone);
+        
+        // println!("seconds: {}, tz: {}", seconds_from_epoch, timezone);
+
+        
     }
 }
